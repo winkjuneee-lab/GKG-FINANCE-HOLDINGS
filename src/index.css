@@ -25,3 +25,14 @@
   @apply selection:bg-blue-100 selection:text-blue-900;
 }
 
+.text-3d {
+  text-shadow: 
+    1px 1px 0px #e2e8f0,
+    2px 2px 0px #e2e8f0,
+    3px 3px 0px #cbd5e1,
+    4px 4px 0px #cbd5e1,
+    5px 5px 15px rgba(0, 0, 0, 0.1);
+  transform: perspective(1000px) rotateX(5deg) rotateY(-5deg);
+  display: inline-block;
+}
+

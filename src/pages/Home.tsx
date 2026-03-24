@@ -16,7 +16,7 @@ export default function Home() {
       <section id="services" className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-slate-900 mb-4">{t('services.title')}</h2>
+            <h2 className="text-4xl font-bold text-slate-900 mb-4 text-3d">{t('services.title')}</h2>
             <p className="text-slate-600 max-w-2xl mx-auto">
               {t('services.subtitle')}
             </p>
@@ -56,7 +56,7 @@ export default function Home() {
       <section id="about" className="py-20 bg-slate-50">
         <div className="max-w-7xl mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center">
-            <h2 className="text-4xl font-bold text-slate-900 mb-6">{t('about.title')}</h2>
+            <h2 className="text-4xl font-bold text-slate-900 mb-6 text-3d">{t('about.title')}</h2>
             <p className="text-lg text-slate-600 mb-8 leading-relaxed">
               {t('about.desc')}
             </p>
@@ -79,7 +79,7 @@ export default function Home() {
           <div className="bg-blue-900 rounded-[3rem] p-12 lg:p-20 text-white relative overflow-hidden">
             <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-3xl" />
             <div className="relative z-10">
-              <h2 className="text-4xl font-bold mb-12 text-center">{t('eligibility.title')}</h2>
+              <h2 className="text-4xl font-bold mb-12 text-center text-3d">{t('eligibility.title')}</h2>
               <div className="grid md:grid-cols-3 gap-12">
                 {[
                   { title: t('eligibility.individuals.title'), items: t('eligibility.individuals.items', { returnObjects: true }) as string[] },
@@ -107,7 +107,7 @@ export default function Home() {
       {/* FAQ Section */}
       <section id="faq" className="py-20 bg-white">
         <div className="max-w-4xl mx-auto px-4">
-          <h2 className="text-4xl font-bold text-slate-900 mb-12 text-center">{t('faq.title')}</h2>
+          <h2 className="text-4xl font-bold text-slate-900 mb-12 text-center text-3d">{t('faq.title')}</h2>
           <div className="space-y-6">
             {[
               t('faq.q1', { returnObjects: true }),
@@ -129,7 +129,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="bg-white rounded-[3rem] shadow-xl overflow-hidden grid lg:grid-cols-2">
             <div className="p-12 lg:p-20 bg-blue-900 text-white">
-              <h2 className="text-4xl font-bold mb-8">{t('contact.title')}</h2>
+              <h2 className="text-4xl font-bold mb-8 text-3d">{t('contact.title')}</h2>
               <p className="text-lg text-blue-100 mb-12">
                 {t('contact.subtitle')}
               </p>

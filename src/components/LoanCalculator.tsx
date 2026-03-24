@@ -47,7 +47,7 @@ export default function LoanCalculator() {
           className="bg-white rounded-2xl shadow-xl overflow-hidden grid md:grid-cols-2"
         >
           <div className="p-8 md:p-12">
-            <h2 className="text-3xl font-bold text-slate-900 mb-8">{t('calculator.title')}</h2>
+            <h2 className="text-3xl font-bold text-slate-900 mb-8 text-3d">{t('calculator.title')}</h2>
             
             <div className="space-y-6">
               <div>

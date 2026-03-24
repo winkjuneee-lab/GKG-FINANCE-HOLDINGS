@@ -24,7 +24,7 @@ export default function Hero() {
               <Shield size={14} />
               {t('hero.badge')}
             </div>
-            <h1 className="text-5xl lg:text-7xl font-bold text-slate-900 leading-tight mb-8">
+            <h1 className="text-5xl lg:text-7xl font-bold text-slate-900 leading-tight mb-8 text-3d">
               {t('hero.title')}
             </h1>
             <p className="text-xl text-slate-600 mb-10 leading-relaxed max-w-xl">

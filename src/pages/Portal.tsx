@@ -33,9 +33,13 @@ import {
   Plus,
   Clock,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Shield,
+  User as UserIcon
 } from 'lucide-react';
 import { LoanApplication, UserProfile } from '../types';
+import Navbar from '../components/Navbar';
+import { Link } from 'react-router-dom';
 
 enum OperationType {
   CREATE = 'create',
@@ -328,24 +332,27 @@ export default function Portal() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-slate-200 hidden lg:flex flex-col">
-        <div className="p-6 border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-900 rounded-lg flex items-center justify-center text-white font-bold">GF</div>
-            <span className="font-bold text-slate-900">Global Finance</span>
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      <Navbar />
+      
+      <div className="flex-1 flex pt-20">
+        {/* Sidebar */}
+        <aside className="w-64 bg-white border-r border-slate-200 hidden lg:flex flex-col sticky top-20 h-[calc(100vh-80px)]">
+          <div className="p-6 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-blue-900 rounded-lg flex items-center justify-center text-white font-bold">GKG</div>
+              <span className="font-bold text-slate-900">GKG FINANCE</span>
+            </div>
           </div>
-        </div>
-        <nav className="flex-1 p-4 space-y-2">
-          <button 
-            onClick={() => setActiveTab('dashboard')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
-              activeTab === 'dashboard' ? 'bg-blue-50 text-blue-900' : 'text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            <LayoutDashboard size={20} /> {t('portal.sidebar.dashboard')}
-          </button>
+          <nav className="flex-1 p-4 space-y-2">
+            <button 
+              onClick={() => setActiveTab('dashboard')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
+                activeTab === 'dashboard' ? 'bg-blue-50 text-blue-900' : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <LayoutDashboard size={20} /> {t('portal.sidebar.dashboard')}
+            </button>
           <button 
             onClick={() => setActiveTab('applications')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
@@ -420,7 +427,7 @@ export default function Portal() {
             <header className="flex justify-between items-center mb-10">
               <div>
                 <h1 className="text-2xl font-bold text-slate-900">{t('portal.dashboard.hello', { name: user.displayName })}</h1>
-                <p className="text-slate-500">{t('portal.dashboard.subtitle')}</p>
+                <p className="text-slate-500">Here's what's happening with your loans.</p>
               </div>
               <button 
                 onClick={() => setShowApplyModal(true)}
@@ -612,6 +619,7 @@ export default function Portal() {
           </div>
         )}
       </main>
+      </div>
 
       {/* Apply Modal */}
       {showApplyModal && (

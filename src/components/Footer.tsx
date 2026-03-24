@@ -73,7 +73,7 @@ export default function Footer() {
 
         <div className="pt-8 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-slate-500">
           <div className="max-w-md">
-            <p>© 2026 GKG FINANCE HOLDINGS. All rights reserved.</p>
+            <p>© 2014 GKG FINANCE HOLDINGS. All rights reserved.</p>
             <p className="mt-2 text-[10px] opacity-50 uppercase tracking-tighter">
               {t('footer.disclaimer')}
             </p>

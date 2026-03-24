@@ -55,31 +55,20 @@ export default function Home() {
 
       <section id="about" className="py-20 bg-slate-50">
         <div className="max-w-7xl mx-auto px-4">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
-            <div className="relative">
-              <img 
-                src="https://images.unsplash.com/photo-1573161158365-59b82f3d95a2?auto=format&fit=crop&q=80&w=1000" 
-                alt="Our Team" 
-                className="rounded-3xl shadow-2xl"
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute -bottom-10 -right-10 w-64 h-64 bg-blue-900/10 rounded-full -z-10" />
-            </div>
-            <div>
-              <h2 className="text-4xl font-bold text-slate-900 mb-6">{t('about.title')}</h2>
-              <p className="text-lg text-slate-600 mb-8 leading-relaxed">
-                {t('about.desc')}
-              </p>
-              <div className="space-y-4">
-                {(t('about.points', { returnObjects: true }) as string[]).map(item => (
-                  <div key={item} className="flex items-center gap-3">
-                    <div className="w-6 h-6 bg-green-100 text-green-600 rounded-full flex items-center justify-center">
-                      <CheckCircle2 size={14} />
-                    </div>
-                    <span className="font-medium text-slate-700">{item}</span>
+          <div className="max-w-3xl mx-auto text-center">
+            <h2 className="text-4xl font-bold text-slate-900 mb-6">{t('about.title')}</h2>
+            <p className="text-lg text-slate-600 mb-8 leading-relaxed">
+              {t('about.desc')}
+            </p>
+            <div className="flex flex-wrap justify-center gap-6">
+              {(t('about.points', { returnObjects: true }) as string[]).map(item => (
+                <div key={item} className="flex items-center gap-3">
+                  <div className="w-6 h-6 bg-green-100 text-green-600 rounded-full flex items-center justify-center">
+                    <CheckCircle2 size={14} />
                   </div>
-                ))}
-              </div>
+                  <span className="font-medium text-slate-700">{item}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>

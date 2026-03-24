@@ -19,7 +19,8 @@ import {
   serverTimestamp,
   doc,
   setDoc,
-  getDoc
+  getDoc,
+  getDocFromServer
 } from 'firebase/firestore';
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
@@ -35,6 +36,57 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { LoanApplication, UserProfile } from '../types';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 export default function Portal() {
   const { t } = useTranslation();
@@ -53,38 +105,62 @@ export default function Portal() {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
-        // Ensure user profile exists
-        const userRef = doc(db, 'users', u.uid);
-        const userSnap = await getDoc(userRef);
-        
-        if (!userSnap.exists()) {
-          const newProfile: UserProfile = {
-            uid: u.uid,
-            email: u.email!,
-            displayName: u.displayName || '',
-            role: 'client',
-            createdAt: new Date().toISOString()
-          };
-          await setDoc(userRef, newProfile);
-          setProfile(newProfile);
-        } else {
-          setProfile(userSnap.data() as UserProfile);
+        try {
+          // Ensure user profile exists
+          const userRef = doc(db, 'users', u.uid);
+          const userSnap = await getDoc(userRef);
+          
+          if (!userSnap.exists()) {
+            const newProfile: UserProfile = {
+              uid: u.uid,
+              email: u.email!,
+              displayName: u.displayName || '',
+              role: 'client',
+              createdAt: new Date().toISOString()
+            };
+            await setDoc(userRef, newProfile);
+            setProfile(newProfile);
+          } else {
+            setProfile(userSnap.data() as UserProfile);
+          }
+        } catch (error) {
+          console.error("Profile fetch failed", error);
         }
-
-        // Listen for applications
-        const q = query(collection(db, 'applications'), where('userId', '==', u.uid));
-        const unsubApps = onSnapshot(q, (snapshot) => {
-          const apps = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LoanApplication));
-          setApplications(apps);
-          setLoading(false);
-        });
-
-        return () => unsubApps();
       } else {
+        setProfile(null);
+        setApplications([]);
         setLoading(false);
       }
     });
     return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(collection(db, 'applications'), where('userId', '==', user.uid));
+    const unsubApps = onSnapshot(q, (snapshot) => {
+      const apps = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LoanApplication));
+      setApplications(apps);
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'applications');
+    });
+
+    return () => unsubApps();
+  }, [user]);
+
+  useEffect(() => {
+    async function testConnection() {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if(error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration. ");
+        }
+      }
+    }
+    testConnection();
   }, []);
 
   const handleLogin = async () => {

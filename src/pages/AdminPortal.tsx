@@ -8,7 +8,8 @@ import {
   doc, 
   getDoc,
   updateDoc,
-  orderBy
+  orderBy,
+  getDocFromServer
 } from 'firebase/firestore';
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
@@ -26,6 +27,57 @@ import {
 } from 'lucide-react';
 import { UserProfile, LoanApplication } from '../types';
 
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
 export default function AdminPortal() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -41,39 +93,63 @@ export default function AdminPortal() {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
-        const userRef = doc(db, 'users', u.uid);
-        const userSnap = await getDoc(userRef);
-        const profile = userSnap.data() as UserProfile;
-        
-        // Check if admin (either by role or by email bootstrap)
-        const isUserAdmin = profile?.role === 'admin' || u.email === 'winkjuneee@gmail.com';
-        setIsAdmin(isUserAdmin);
-
-        if (isUserAdmin) {
-          // Listen for all users
-          const usersUnsub = onSnapshot(collection(db, 'users'), (snapshot) => {
-            setUsers(snapshot.docs.map(doc => doc.data() as UserProfile));
-          });
-
-          // Listen for all applications
-          const appsQuery = query(collection(db, 'applications'), orderBy('createdAt', 'desc'));
-          const appsUnsub = onSnapshot(appsQuery, (snapshot) => {
-            setApplications(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LoanApplication)));
-            setLoading(false);
-          });
-
-          return () => {
-            usersUnsub();
-            appsUnsub();
-          };
-        } else {
+        try {
+          const userRef = doc(db, 'users', u.uid);
+          const userSnap = await getDoc(userRef);
+          const profile = userSnap.data() as UserProfile;
+          
+          // Check if admin (either by role or by email bootstrap)
+          const isUserAdmin = profile?.role === 'admin' || u.email === 'winkjuneee@gmail.com';
+          setIsAdmin(isUserAdmin);
+          if (!isUserAdmin) setLoading(false);
+        } catch (error) {
+          console.error("Admin check failed", error);
           setLoading(false);
         }
       } else {
+        setIsAdmin(false);
         setLoading(false);
       }
     });
     return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!isAdmin || !user) return;
+
+    // Listen for all users
+    const usersUnsub = onSnapshot(collection(db, 'users'), (snapshot) => {
+      setUsers(snapshot.docs.map(doc => doc.data() as UserProfile));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'users');
+    });
+
+    // Listen for all applications
+    const appsQuery = query(collection(db, 'applications'), orderBy('createdAt', 'desc'));
+    const appsUnsub = onSnapshot(appsQuery, (snapshot) => {
+      setApplications(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LoanApplication)));
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'applications');
+    });
+
+    return () => {
+      usersUnsub();
+      appsUnsub();
+    };
+  }, [isAdmin, user]);
+
+  useEffect(() => {
+    async function testConnection() {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if(error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration. ");
+        }
+      }
+    }
+    testConnection();
   }, []);
 
   const handleLogout = async () => {

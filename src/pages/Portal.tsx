@@ -95,6 +95,7 @@ export default function Portal() {
   const [applications, setApplications] = useState<LoanApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [showApplyModal, setShowApplyModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'applications' | 'messages' | 'settings'>('dashboard');
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -337,16 +338,36 @@ export default function Portal() {
           </div>
         </div>
         <nav className="flex-1 p-4 space-y-2">
-          <button className="w-full flex items-center gap-3 px-4 py-3 bg-blue-50 text-blue-900 rounded-xl font-bold">
+          <button 
+            onClick={() => setActiveTab('dashboard')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
+              activeTab === 'dashboard' ? 'bg-blue-50 text-blue-900' : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
             <LayoutDashboard size={20} /> {t('portal.sidebar.dashboard')}
           </button>
-          <button className="w-full flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-xl font-medium transition-all">
+          <button 
+            onClick={() => setActiveTab('applications')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
+              activeTab === 'applications' ? 'bg-blue-50 text-blue-900' : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
             <FileText size={20} /> {t('portal.sidebar.applications')}
           </button>
-          <button className="w-full flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-xl font-medium transition-all">
+          <button 
+            onClick={() => setActiveTab('messages')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
+              activeTab === 'messages' ? 'bg-blue-50 text-blue-900' : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
             <MessageSquare size={20} /> {t('portal.sidebar.messages')}
           </button>
-          <button className="w-full flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 rounded-xl font-medium transition-all">
+          <button 
+            onClick={() => setActiveTab('settings')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
+              activeTab === 'settings' ? 'bg-blue-50 text-blue-900' : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
             <Settings size={20} /> {t('portal.sidebar.settings')}
           </button>
         </nav>
@@ -360,89 +381,236 @@ export default function Portal() {
         </div>
       </aside>
 
+      {/* Mobile Bottom Nav */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-2 z-50">
+        <button 
+          onClick={() => setActiveTab('dashboard')}
+          className={`flex flex-col items-center gap-1 p-2 ${activeTab === 'dashboard' ? 'text-blue-900' : 'text-slate-400'}`}
+        >
+          <LayoutDashboard size={20} />
+          <span className="text-[10px] font-bold uppercase">{t('portal.sidebar.dashboard')}</span>
+        </button>
+        <button 
+          onClick={() => setActiveTab('applications')}
+          className={`flex flex-col items-center gap-1 p-2 ${activeTab === 'applications' ? 'text-blue-900' : 'text-slate-400'}`}
+        >
+          <FileText size={20} />
+          <span className="text-[10px] font-bold uppercase">{t('portal.sidebar.applications')}</span>
+        </button>
+        <button 
+          onClick={() => setActiveTab('messages')}
+          className={`flex flex-col items-center gap-1 p-2 ${activeTab === 'messages' ? 'text-blue-900' : 'text-slate-400'}`}
+        >
+          <MessageSquare size={20} />
+          <span className="text-[10px] font-bold uppercase">{t('portal.sidebar.messages')}</span>
+        </button>
+        <button 
+          onClick={() => setActiveTab('settings')}
+          className={`flex flex-col items-center gap-1 p-2 ${activeTab === 'settings' ? 'text-blue-900' : 'text-slate-400'}`}
+        >
+          <Settings size={20} />
+          <span className="text-[10px] font-bold uppercase">{t('portal.sidebar.settings')}</span>
+        </button>
+      </nav>
+
       {/* Main Content */}
-      <main className="flex-1 p-4 lg:p-10">
-        <header className="flex justify-between items-center mb-10">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">{t('portal.dashboard.hello', { name: user.displayName })}</h1>
-            <p className="text-slate-500">{t('portal.dashboard.subtitle')}</p>
-          </div>
-          <button 
-            onClick={() => setShowApplyModal(true)}
-            className="px-6 py-3 bg-blue-900 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-blue-800 transition-all shadow-lg shadow-blue-900/20"
-          >
-            <Plus size={20} /> {t('portal.dashboard.newApplication')}
-          </button>
-        </header>
+      <main className="flex-1 p-4 lg:p-10 overflow-y-auto pb-24 lg:pb-10">
+        {activeTab === 'dashboard' && (
+          <>
+            <header className="flex justify-between items-center mb-10">
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900">{t('portal.dashboard.hello', { name: user.displayName })}</h1>
+                <p className="text-slate-500">{t('portal.dashboard.subtitle')}</p>
+              </div>
+              <button 
+                onClick={() => setShowApplyModal(true)}
+                className="px-6 py-3 bg-blue-900 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-blue-800 transition-all shadow-lg shadow-blue-900/20"
+              >
+                <Plus size={20} /> {t('portal.dashboard.newApplication')}
+              </button>
+            </header>
 
-        <div className="grid md:grid-cols-3 gap-6 mb-10">
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-            <p className="text-sm font-medium text-slate-500 mb-1">{t('portal.dashboard.activeApps')}</p>
-            <p className="text-3xl font-bold text-slate-900">{applications.length}</p>
-          </div>
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-            <p className="text-sm font-medium text-slate-500 mb-1">{t('portal.dashboard.totalFunded')}</p>
-            <p className="text-3xl font-bold text-slate-900">$0</p>
-          </div>
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-            <p className="text-sm font-medium text-slate-500 mb-1">{t('portal.dashboard.nextPayment')}</p>
-            <p className="text-3xl font-bold text-slate-900">--</p>
-          </div>
-        </div>
+            <div className="grid md:grid-cols-3 gap-6 mb-10">
+              <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                <p className="text-sm font-medium text-slate-500 mb-1">{t('portal.dashboard.activeApps')}</p>
+                <p className="text-3xl font-bold text-slate-900">{applications.length}</p>
+              </div>
+              <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                <p className="text-sm font-medium text-slate-500 mb-1">{t('portal.dashboard.totalFunded')}</p>
+                <p className="text-3xl font-bold text-slate-900">$0</p>
+              </div>
+              <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                <p className="text-sm font-medium text-slate-500 mb-1">{t('portal.dashboard.nextPayment')}</p>
+                <p className="text-3xl font-bold text-slate-900">--</p>
+              </div>
+            </div>
 
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-            <h2 className="font-bold text-slate-900">{t('portal.dashboard.recentApps')}</h2>
-            <button className="text-sm text-blue-600 font-bold hover:underline">{t('portal.dashboard.viewAll')}</button>
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                <h2 className="font-bold text-slate-900">{t('portal.dashboard.recentApps')}</h2>
+                <button 
+                  onClick={() => setActiveTab('applications')}
+                  className="text-sm text-blue-600 font-bold hover:underline"
+                >
+                  {t('portal.dashboard.viewAll')}
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider">
+                      <th className="px-6 py-4">{t('portal.dashboard.table.id')}</th>
+                      <th className="px-6 py-4">{t('portal.dashboard.table.amount')}</th>
+                      <th className="px-6 py-4">{t('portal.dashboard.table.class')}</th>
+                      <th className="px-6 py-4">{t('portal.dashboard.table.date')}</th>
+                      <th className="px-6 py-4">{t('portal.dashboard.table.status')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {applications.slice(0, 5).map((app) => (
+                      <tr key={app.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-4 font-mono text-xs text-slate-400">#{app.id.slice(0, 8)}</td>
+                        <td className="px-6 py-4 font-bold text-slate-900">${app.amount.toLocaleString()}</td>
+                        <td className="px-6 py-4">
+                          <span className="px-2 py-1 bg-blue-50 text-blue-700 text-[10px] font-bold uppercase rounded-md">
+                            {app.loanClass}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-500">{new Date(app.createdAt).toLocaleDateString()}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            {app.status === 'pending' && <Clock size={16} className="text-amber-500" />}
+                            {app.status === 'approved' && <CheckCircle size={16} className="text-green-500" />}
+                            {app.status === 'rejected' && <AlertCircle size={16} className="text-red-500" />}
+                            <span className={`text-sm font-bold capitalize ${
+                              app.status === 'pending' ? 'text-amber-600' : 
+                              app.status === 'approved' ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                              {app.status}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {applications.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-10 text-center text-slate-400">
+                          {t('portal.dashboard.noApps')}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
+
+        {activeTab === 'applications' && (
+          <>
+            <header className="mb-10">
+              <h1 className="text-2xl font-bold text-slate-900">{t('portal.sidebar.applications')}</h1>
+              <p className="text-slate-500">{t('portal.dashboard.subtitle')}</p>
+            </header>
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider">
+                      <th className="px-6 py-4">{t('portal.dashboard.table.id')}</th>
+                      <th className="px-6 py-4">{t('portal.dashboard.table.amount')}</th>
+                      <th className="px-6 py-4">{t('portal.dashboard.table.class')}</th>
+                      <th className="px-6 py-4">{t('portal.dashboard.table.date')}</th>
+                      <th className="px-6 py-4">{t('portal.dashboard.table.status')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {applications.map((app) => (
+                      <tr key={app.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-4 font-mono text-xs text-slate-400">#{app.id.slice(0, 8)}</td>
+                        <td className="px-6 py-4 font-bold text-slate-900">${app.amount.toLocaleString()}</td>
+                        <td className="px-6 py-4">
+                          <span className="px-2 py-1 bg-blue-50 text-blue-700 text-[10px] font-bold uppercase rounded-md">
+                            {app.loanClass}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-500">{new Date(app.createdAt).toLocaleDateString()}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            {app.status === 'pending' && <Clock size={16} className="text-amber-500" />}
+                            {app.status === 'approved' && <CheckCircle size={16} className="text-green-500" />}
+                            {app.status === 'rejected' && <AlertCircle size={16} className="text-red-500" />}
+                            <span className={`text-sm font-bold capitalize ${
+                              app.status === 'pending' ? 'text-amber-600' : 
+                              app.status === 'approved' ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                              {app.status}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {applications.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-10 text-center text-slate-400">
+                          {t('portal.dashboard.noApps')}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
+
+        {activeTab === 'messages' && (
+          <div className="h-full flex flex-col items-center justify-center text-center p-10">
+            <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mb-6">
+              <MessageSquare size={40} />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">{t('portal.sidebar.messages')}</h2>
+            <p className="text-slate-500 max-w-md">
+              You don't have any messages yet. Our team will contact you here regarding your applications.
+            </p>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider">
-                  <th className="px-6 py-4">{t('portal.dashboard.table.id')}</th>
-                  <th className="px-6 py-4">{t('portal.dashboard.table.amount')}</th>
-                  <th className="px-6 py-4">{t('portal.dashboard.table.class')}</th>
-                  <th className="px-6 py-4">{t('portal.dashboard.table.date')}</th>
-                  <th className="px-6 py-4">{t('portal.dashboard.table.status')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {applications.map((app) => (
-                  <tr key={app.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-mono text-xs text-slate-400">#{app.id.slice(0, 8)}</td>
-                    <td className="px-6 py-4 font-bold text-slate-900">${app.amount.toLocaleString()}</td>
-                    <td className="px-6 py-4">
-                      <span className="px-2 py-1 bg-blue-50 text-blue-700 text-[10px] font-bold uppercase rounded-md">
-                        {app.loanClass}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-500">{new Date(app.createdAt).toLocaleDateString()}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        {app.status === 'pending' && <Clock size={16} className="text-amber-500" />}
-                        {app.status === 'approved' && <CheckCircle size={16} className="text-green-500" />}
-                        {app.status === 'rejected' && <AlertCircle size={16} className="text-red-500" />}
-                        <span className={`text-sm font-bold capitalize ${
-                          app.status === 'pending' ? 'text-amber-600' : 
-                          app.status === 'approved' ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                          {app.status}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {applications.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-10 text-center text-slate-400">
-                      {t('portal.dashboard.noApps')}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+        )}
+
+        {activeTab === 'settings' && (
+          <div className="max-w-2xl">
+            <header className="mb-10">
+              <h1 className="text-2xl font-bold text-slate-900">{t('portal.sidebar.settings')}</h1>
+              <p className="text-slate-500">Manage your account preferences and profile information.</p>
+            </header>
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 space-y-8">
+              <div className="flex items-center gap-6 pb-8 border-b border-slate-100">
+                <div className="w-20 h-20 bg-blue-900 rounded-2xl flex items-center justify-center text-white text-2xl font-bold">
+                  {user.displayName?.charAt(0) || user.email?.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900">{user.displayName}</h3>
+                  <p className="text-slate-500">{user.email}</p>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <h4 className="font-bold text-slate-900">Profile Information</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
+                    <input type="text" defaultValue={user.displayName || ''} className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-900" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Email Address</label>
+                    <input type="email" defaultValue={user.email || ''} disabled className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 outline-none" />
+                  </div>
+                </div>
+                <button className="px-6 py-3 bg-blue-900 text-white rounded-xl font-bold hover:bg-blue-800 transition-all">
+                  Save Changes
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </main>
 
       {/* Apply Modal */}

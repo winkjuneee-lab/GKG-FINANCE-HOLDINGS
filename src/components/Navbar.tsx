@@ -22,7 +22,7 @@ export default function Navbar() {
         const userRef = doc(db, 'users', u.uid);
         const userSnap = await getDoc(userRef);
         const profile = userSnap.data() as UserProfile;
-        setIsAdmin(profile?.role === 'admin' || u.email === 'winkjuneee@gmail.com');
+        setIsAdmin(profile?.role === 'admin' || u.email === 'gkgholdings@outlook.com');
       } else {
         setIsAdmin(false);
       }

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db } from '../firebase';
-import { onAuthStateChanged, User as FirebaseUser, signOut } from 'firebase/auth';
+import { onAuthStateChanged, User as FirebaseUser, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { 
   collection, 
   query, 
   onSnapshot, 
   doc, 
   getDoc,
+  setDoc,
   updateDoc,
   orderBy,
   getDocFromServer
@@ -88,6 +89,10 @@ export default function AdminPortal() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
@@ -99,7 +104,7 @@ export default function AdminPortal() {
           const profile = userSnap.data() as UserProfile;
           
           // Check if admin (either by role or by email bootstrap)
-          const isUserAdmin = profile?.role === 'admin' || u.email === 'winkjuneee@gmail.com';
+          const isUserAdmin = profile?.role === 'admin' || u.email === 'gkgholdings@outlook.com';
           setIsAdmin(isUserAdmin);
           if (!isUserAdmin) setLoading(false);
         } catch (error) {
@@ -157,6 +162,32 @@ export default function AdminPortal() {
     navigate('/');
   };
 
+  const handleManualLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    try {
+      if (isSignUp) {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        
+        // Create admin profile in Firestore
+        const userRef = doc(db, 'users', userCredential.user.uid);
+        const newProfile: UserProfile = {
+          uid: userCredential.user.uid,
+          email: email,
+          displayName: 'Admin User',
+          role: 'admin',
+          createdAt: new Date().toISOString()
+        };
+        await setDoc(userRef, newProfile);
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+    } catch (err: any) {
+      console.error("Admin login failed", err);
+      setError(err.message || t('portal.auth.authFailed'));
+    }
+  };
+
   const updateAppStatus = async (appId: string, status: LoanApplication['status']) => {
     try {
       const appRef = doc(db, 'applications', appId);
@@ -173,10 +204,62 @@ export default function AdminPortal() {
 
   if (!isAdmin) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center p-4 text-center">
-        <Shield size={64} className="text-red-500 mb-4" />
-        <h1 className="text-2xl font-bold text-slate-900 mb-2">{t('admin.denied.title')}</h1>
-        <p className="text-slate-500">{t('admin.denied.subtitle')}</p>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="max-w-md w-full bg-white rounded-3xl shadow-2xl p-8 text-center"
+        >
+          <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center text-white font-bold text-2xl mx-auto mb-6">
+            <Shield size={32} />
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">{t('nav.admin')}</h1>
+          <p className="text-slate-500 mb-8">
+            {isSignUp ? "Create Admin Account" : t('admin.denied.subtitle')}
+          </p>
+
+          <form onSubmit={handleManualLogin} className="space-y-4 text-left">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('portal.auth.email')}</label>
+              <input 
+                type="email" 
+                required 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-slate-900" 
+                placeholder="admin@example.com"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('portal.auth.password')}</label>
+              <input 
+                type="password" 
+                required 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-slate-900" 
+                placeholder="••••••••"
+              />
+            </div>
+            {error && <p className="text-red-500 text-sm">{error}</p>}
+            <button 
+              type="submit"
+              className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20"
+            >
+              {isSignUp ? "Sign Up" : t('portal.auth.signIn')}
+            </button>
+          </form>
+
+          <p className="mt-6 text-slate-500 text-sm">
+            {isSignUp ? "Already have an account?" : "Need to create the admin account?"}{' '}
+            <button 
+              onClick={() => { setIsSignUp(!isSignUp); setError(''); }}
+              className="text-slate-900 font-bold hover:underline"
+            >
+              {isSignUp ? t('portal.auth.signIn') : t('portal.auth.signUp')}
+            </button>
+          </p>
+        </motion.div>
       </div>
     );
   }

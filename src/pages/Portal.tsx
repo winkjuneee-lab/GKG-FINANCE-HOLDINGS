@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db } from '../firebase';
 import { 
-  signInWithPopup, 
-  GoogleAuthProvider, 
   signOut, 
   onAuthStateChanged,
   createUserWithEmailAndPassword,
@@ -168,16 +166,6 @@ export default function Portal() {
     testConnection();
   }, []);
 
-  const handleLogin = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error("Login failed", error);
-      setError(t('portal.auth.loginFailed'));
-    }
-  };
-
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -303,19 +291,6 @@ export default function Portal() {
               {isSignUp ? t('portal.auth.signUp') : t('portal.auth.signIn')}
             </button>
           </form>
-
-          <div className="relative mb-6">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
-            <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-slate-400">{t('portal.auth.orContinue')}</span></div>
-          </div>
-
-          <button 
-            onClick={handleLogin}
-            className="w-full py-4 bg-white border-2 border-slate-200 rounded-xl font-bold flex items-center justify-center gap-3 hover:border-blue-900 transition-all mb-6"
-          >
-            <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
-            Google
-          </button>
 
           <p className="text-slate-500 text-sm">
             {isSignUp ? t('portal.auth.alreadyHave') : t('portal.auth.dontHave')}{' '}

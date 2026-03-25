@@ -98,7 +98,9 @@ export default function AdminPortal() {
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [activeTab, setActiveTab] = useState<'applications' | 'users'>('applications');
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
-  const [uploadingForUser, setUploadingForUser] = useState<string | null>(null);
+  const [selectedUserForDoc, setSelectedUserForDoc] = useState<UserProfile | 'all' | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
@@ -155,19 +157,6 @@ export default function AdminPortal() {
     };
   }, [isAdmin, user]);
 
-  useEffect(() => {
-    async function testConnection() {
-      try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
-      } catch (error) {
-        if(error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration. ");
-        }
-      }
-    }
-    testConnection();
-  }, []);
-
   const handleLogout = async () => {
     await signOut(auth);
     navigate('/');
@@ -196,10 +185,26 @@ export default function AdminPortal() {
       }
     } catch (err: any) {
       console.error("Admin login failed", err);
-      if (err.code === 'auth/too-many-requests') {
-        setError('Too many failed attempts. Please wait a few minutes before trying again.');
-      } else {
-        setError(err.message || t('portal.auth.authFailed'));
+      switch (err.code) {
+        case 'auth/too-many-requests':
+          setError('Too many failed attempts. Please wait a few minutes before trying again.');
+          break;
+        case 'auth/invalid-credential':
+        case 'auth/user-not-found':
+        case 'auth/wrong-password':
+          setError('Invalid email or password. Please check your credentials and try again.');
+          break;
+        case 'auth/email-already-in-use':
+          setError('This email is already registered. Please sign in instead.');
+          break;
+        case 'auth/weak-password':
+          setError('Password should be at least 6 characters long.');
+          break;
+        case 'auth/invalid-email':
+          setError('Please enter a valid email address.');
+          break;
+        default:
+          setError(err.message || t('portal.auth.authFailed'));
       }
     } finally {
       setIsAuthLoading(false);
@@ -218,27 +223,44 @@ export default function AdminPortal() {
     }
   };
 
-  const handleFileUpload = async (userId: string, file: File) => {
+  const handleFileUpload = async (userId: string | 'all', file: File) => {
     try {
-      setUploadingForUser(userId);
-      const storageRef = ref(storage, `documents/${userId}/${Date.now()}_${file.name}`);
+      setIsUploading(true);
+      const storageRef = ref(storage, `documents/${userId === 'all' ? 'global' : userId}/${Date.now()}_${file.name}`);
       const snapshot = await uploadBytes(storageRef, file);
       const url = await getDownloadURL(snapshot.ref);
 
-      await addFirestoreDoc(collection(db, 'documents'), {
-        userId,
-        name: file.name,
-        url,
-        type: file.type,
-        createdAt: new Date().toISOString()
-      });
+      if (userId === 'all') {
+        // Create a document for every user
+        const uploadPromises = users.map(u => 
+          addFirestoreDoc(collection(db, 'documents'), {
+            userId: u.uid,
+            name: file.name,
+            url,
+            type: file.type,
+            createdAt: new Date().toISOString()
+          })
+        );
+        await Promise.all(uploadPromises);
+        alert(`File broadcasted to ${users.length} users successfully!`);
+      } else {
+        await addFirestoreDoc(collection(db, 'documents'), {
+          userId,
+          name: file.name,
+          url,
+          type: file.type,
+          createdAt: new Date().toISOString()
+        });
+        alert('File uploaded successfully!');
+      }
       
-      alert('File uploaded successfully!');
+      setSelectedUserForDoc(null);
+      setSelectedFile(null);
     } catch (error) {
       console.error("Upload failed", error);
       alert('Upload failed. Please try again.');
     } finally {
-      setUploadingForUser(null);
+      setIsUploading(false);
     }
   };
 
@@ -350,13 +372,22 @@ export default function AdminPortal() {
             </div>
             <h1 className="text-4xl font-bold text-slate-900">{t('admin.title')}</h1>
           </div>
-          <button 
-            onClick={handleLogout}
-            className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 text-red-600 rounded-xl font-bold hover:bg-red-50 transition-all shadow-sm"
-          >
-            <LogOut size={20} />
-            {t('nav.signOut')}
-          </button>
+          <div className="flex gap-4">
+            <button 
+              onClick={() => setSelectedUserForDoc('all')}
+              className="flex items-center gap-2 px-6 py-3 bg-blue-900 text-white rounded-xl font-bold hover:bg-blue-800 transition-all shadow-lg shadow-blue-900/20"
+            >
+              <Upload size={20} />
+              Broadcast Document
+            </button>
+            <button 
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 text-red-600 rounded-xl font-bold hover:bg-red-50 transition-all shadow-sm"
+            >
+              <LogOut size={20} />
+              {t('nav.signOut')}
+            </button>
+          </div>
         </header>
 
         {/* Stats */}
@@ -558,21 +589,12 @@ export default function AdminPortal() {
                       </td>
                       <td className="px-6 py-6 text-right">
                         <div className="flex justify-end gap-2">
-                          <label className={`p-2 rounded-lg cursor-pointer transition-all ${
-                            uploadingForUser === u.uid ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white'
-                          }`}>
+                          <button 
+                            onClick={() => setSelectedUserForDoc(u)}
+                            className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all"
+                          >
                             <Upload size={18} />
-                            <input 
-                              type="file" 
-                              className="hidden" 
-                              accept=".pdf"
-                              disabled={uploadingForUser !== null}
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) handleFileUpload(u.uid, file);
-                              }}
-                            />
-                          </label>
+                          </button>
                           <button 
                             onClick={() => setEditingUser(u)}
                             className="p-2 bg-slate-50 text-slate-400 rounded-lg hover:bg-slate-900 hover:text-white transition-all"
@@ -589,6 +611,83 @@ export default function AdminPortal() {
           </div>
         )}
       </div>
+
+      {/* Upload Document Modal */}
+      {selectedUserForDoc && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8"
+          >
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Upload Document</h2>
+            <p className="text-slate-500 mb-6">
+              {selectedUserForDoc === 'all' ? (
+                <>Broadcasting to <span className="font-bold text-blue-900">ALL {users.length} users</span></>
+              ) : (
+                <>Uploading for: <span className="font-bold text-slate-900">{selectedUserForDoc.displayName || selectedUserForDoc.email}</span></>
+              )}
+            </p>
+            
+            <div className="space-y-6">
+              <div 
+                className={`border-2 border-dashed rounded-2xl p-10 text-center transition-all ${
+                  selectedFile ? 'border-blue-900 bg-blue-50' : 'border-slate-200 hover:border-blue-900'
+                }`}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const file = e.dataTransfer.files[0];
+                  if (file && file.type === 'application/pdf') setSelectedFile(file);
+                }}
+              >
+                <input 
+                  type="file" 
+                  id="file-upload" 
+                  className="hidden" 
+                  accept=".pdf"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) setSelectedFile(file);
+                  }}
+                />
+                <label htmlFor="file-upload" className="cursor-pointer">
+                  <Upload className={`mx-auto mb-4 ${selectedFile ? 'text-blue-900' : 'text-slate-300'}`} size={48} />
+                  <p className="text-sm font-medium text-slate-600">
+                    {selectedFile ? selectedFile.name : 'Click to upload or drag and drop'}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">PDF files only (max 10MB)</p>
+                </label>
+              </div>
+
+              <div className="flex gap-4">
+                <button 
+                  type="button"
+                  onClick={() => { setSelectedUserForDoc(null); setSelectedFile(null); }}
+                  className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => handleFileUpload(selectedUserForDoc === 'all' ? 'all' : selectedUserForDoc.uid, selectedFile!)}
+                  disabled={!selectedFile || isUploading}
+                  className="flex-1 py-3 bg-blue-900 text-white rounded-xl font-bold hover:bg-blue-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isUploading ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    'Confirm Upload'
+                  )}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       {/* Edit User Modal */}
       {editingUser && (

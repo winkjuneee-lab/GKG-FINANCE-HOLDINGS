@@ -167,19 +167,6 @@ export default function Portal() {
     };
   }, [user]);
 
-  useEffect(() => {
-    async function testConnection() {
-      try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
-      } catch (error) {
-        if(error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration. ");
-        }
-      }
-    }
-    testConnection();
-  }, []);
-
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -205,10 +192,26 @@ export default function Portal() {
       }
     } catch (err: any) {
       console.error("Auth failed", err);
-      if (err.code === 'auth/too-many-requests') {
-        setError('Too many failed attempts. Please wait a few minutes before trying again.');
-      } else {
-        setError(err.message || t('portal.auth.authFailed'));
+      switch (err.code) {
+        case 'auth/too-many-requests':
+          setError('Too many failed attempts. Please wait a few minutes before trying again.');
+          break;
+        case 'auth/invalid-credential':
+        case 'auth/user-not-found':
+        case 'auth/wrong-password':
+          setError('Invalid email or password. Please check your credentials and try again.');
+          break;
+        case 'auth/email-already-in-use':
+          setError('This email is already registered. Please sign in instead.');
+          break;
+        case 'auth/weak-password':
+          setError('Password should be at least 6 characters long.');
+          break;
+        case 'auth/invalid-email':
+          setError('Please enter a valid email address.');
+          break;
+        default:
+          setError(err.message || t('portal.auth.authFailed'));
       }
     } finally {
       setIsAuthLoading(false);
@@ -246,7 +249,7 @@ export default function Portal() {
       });
       setShowApplyModal(false);
     } catch (error) {
-      console.error("Failed to apply", error);
+      handleFirestoreError(error, OperationType.WRITE, 'applications');
     }
   };
 

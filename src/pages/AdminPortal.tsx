@@ -98,7 +98,8 @@ export default function AdminPortal() {
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [activeTab, setActiveTab] = useState<'applications' | 'users'>('applications');
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
-  const [selectedUserForDoc, setSelectedUserForDoc] = useState<UserProfile | 'all' | null>(null);
+  const [selectedUserForDoc, setSelectedUserForDoc] = useState<UserProfile | 'multi' | null>(null);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [email, setEmail] = useState('');
@@ -223,39 +224,34 @@ export default function AdminPortal() {
     }
   };
 
-  const handleFileUpload = async (userId: string | 'all', file: File) => {
+  const handleFileUpload = async (userIds: string[], file: File) => {
     try {
       setIsUploading(true);
-      const storageRef = ref(storage, `documents/${userId === 'all' ? 'global' : userId}/${Date.now()}_${file.name}`);
+      const storageRef = ref(storage, `documents/${userIds.length > 1 ? 'broadcast' : userIds[0]}/${Date.now()}_${file.name}`);
       const snapshot = await uploadBytes(storageRef, file);
       const url = await getDownloadURL(snapshot.ref);
 
-      if (userId === 'all') {
-        // Create a document for every user
-        const uploadPromises = users.map(u => 
-          addFirestoreDoc(collection(db, 'documents'), {
-            userId: u.uid,
-            name: file.name,
-            url,
-            type: file.type,
-            createdAt: new Date().toISOString()
-          })
-        );
-        await Promise.all(uploadPromises);
-        alert(`File broadcasted to ${users.length} users successfully!`);
-      } else {
-        await addFirestoreDoc(collection(db, 'documents'), {
-          userId,
+      // Create a document for every designated user
+      const uploadPromises = userIds.map(uid => 
+        addFirestoreDoc(collection(db, 'documents'), {
+          userId: uid,
           name: file.name,
           url,
           type: file.type,
           createdAt: new Date().toISOString()
-        });
+        })
+      );
+      await Promise.all(uploadPromises);
+      
+      if (userIds.length > 1) {
+        alert(`File reflected on the accounts of ${userIds.length} designated users successfully!`);
+      } else {
         alert('File uploaded successfully!');
       }
       
       setSelectedUserForDoc(null);
       setSelectedFile(null);
+      setSelectedUserIds([]);
     } catch (error) {
       console.error("Upload failed", error);
       alert('Upload failed. Please try again.');
@@ -374,7 +370,10 @@ export default function AdminPortal() {
           </div>
           <div className="flex gap-4">
             <button 
-              onClick={() => setSelectedUserForDoc('all')}
+              onClick={() => {
+                setSelectedUserForDoc('multi');
+                setSelectedUserIds(users.map(u => u.uid)); // Default to all
+              }}
               className="flex items-center gap-2 px-6 py-3 bg-blue-900 text-white rounded-xl font-bold hover:bg-blue-800 transition-all shadow-lg shadow-blue-900/20"
             >
               <Upload size={20} />
@@ -618,18 +617,56 @@ export default function AdminPortal() {
           <motion.div 
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8"
+            className="bg-white rounded-3xl shadow-2xl max-w-xl w-full p-8 max-h-[90vh] overflow-y-auto"
           >
             <h2 className="text-2xl font-bold text-slate-900 mb-2">Upload Document</h2>
             <p className="text-slate-500 mb-6">
-              {selectedUserForDoc === 'all' ? (
-                <>Broadcasting to <span className="font-bold text-blue-900">ALL {users.length} users</span></>
+              {selectedUserForDoc === 'multi' ? (
+                <>Select users to reflect this document on their accounts</>
               ) : (
                 <>Uploading for: <span className="font-bold text-slate-900">{selectedUserForDoc.displayName || selectedUserForDoc.email}</span></>
               )}
             </p>
             
             <div className="space-y-6">
+              {selectedUserForDoc === 'multi' && (
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <label className="text-sm font-bold text-slate-700">Designated Users ({selectedUserIds.length})</label>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => setSelectedUserIds(users.map(u => u.uid))}
+                        className="text-xs text-blue-900 font-bold hover:underline"
+                      >
+                        Select All
+                      </button>
+                      <button 
+                        onClick={() => setSelectedUserIds([])}
+                        className="text-xs text-slate-500 font-bold hover:underline"
+                      >
+                        Deselect All
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    {users.map(u => (
+                      <label key={u.uid} className="flex items-center gap-2 p-2 hover:bg-white rounded-lg cursor-pointer transition-colors">
+                        <input 
+                          type="checkbox" 
+                          checked={selectedUserIds.includes(u.uid)}
+                          onChange={(e) => {
+                            if (e.target.checked) setSelectedUserIds([...selectedUserIds, u.uid]);
+                            else setSelectedUserIds(selectedUserIds.filter(id => id !== u.uid));
+                          }}
+                          className="w-4 h-4 rounded border-slate-300 text-blue-900 focus:ring-blue-900"
+                        />
+                        <span className="text-sm text-slate-700 truncate">{u.displayName || u.email}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div 
                 className={`border-2 border-dashed rounded-2xl p-10 text-center transition-all ${
                   selectedFile ? 'border-blue-900 bg-blue-50' : 'border-slate-200 hover:border-blue-900'
@@ -663,15 +700,18 @@ export default function AdminPortal() {
               <div className="flex gap-4">
                 <button 
                   type="button"
-                  onClick={() => { setSelectedUserForDoc(null); setSelectedFile(null); }}
+                  onClick={() => { setSelectedUserForDoc(null); setSelectedFile(null); setSelectedUserIds([]); }}
                   className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-all"
                 >
                   Cancel
                 </button>
                 <button 
                   type="button"
-                  onClick={() => handleFileUpload(selectedUserForDoc === 'all' ? 'all' : selectedUserForDoc.uid, selectedFile!)}
-                  disabled={!selectedFile || isUploading}
+                  onClick={() => {
+                    const ids = selectedUserForDoc === 'multi' ? selectedUserIds : [selectedUserForDoc.uid];
+                    handleFileUpload(ids, selectedFile!);
+                  }}
+                  disabled={!selectedFile || isUploading || (selectedUserForDoc === 'multi' && selectedUserIds.length === 0)}
                   className="flex-1 py-3 bg-blue-900 text-white rounded-xl font-bold hover:bg-blue-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {isUploading ? (

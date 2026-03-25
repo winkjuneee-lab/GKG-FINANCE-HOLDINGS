@@ -52,7 +52,8 @@ service cloud.firestore {
     function isValidDocument(data) {
       return hasOnlyAllowedFields(['userId', 'name', 'url', 'type', 'createdAt', 'applicationId']) &&
              data.userId is string && data.name is string && data.url is string &&
-             data.type is string && data.createdAt is string;
+             data.type is string && data.createdAt is string &&
+             (!('applicationId' in data) || data.applicationId is string);
     }
 
     // Rules

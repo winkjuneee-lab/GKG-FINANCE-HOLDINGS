@@ -44,7 +44,7 @@
         "type": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["applicationId", "userId", "name", "url"]
+      "required": ["userId", "name", "url"]
     }
   },
   "firestore": {

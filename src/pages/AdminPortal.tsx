@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { UserProfile, LoanApplication, AppDocument } from '../types';
 import { storage } from '../firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { addDoc as addFirestoreDoc } from 'firebase/firestore';
 
 enum OperationType {
@@ -102,6 +102,8 @@ export default function AdminPortal() {
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState<string>('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
@@ -225,11 +227,41 @@ export default function AdminPortal() {
   };
 
   const handleFileUpload = async (userIds: string[], file: File) => {
+    if (userIds.length === 0) {
+      alert('No users selected.');
+      return;
+    }
+
     try {
       setIsUploading(true);
-      const storageRef = ref(storage, `documents/${userIds.length > 1 ? 'broadcast' : userIds[0]}/${Date.now()}_${file.name}`);
-      const snapshot = await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(snapshot.ref);
+      setUploadProgress(0);
+      setUploadStatus('Starting upload...');
+      
+      const storagePath = `documents/${userIds.length > 1 ? 'broadcast' : userIds[0]}/${Date.now()}_${file.name}`;
+      const storageRef = ref(storage, storagePath);
+      
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+      await new Promise<void>((resolve, reject) => {
+        uploadTask.on('state_changed', 
+          (snapshot) => {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            setUploadProgress(progress);
+            setUploadStatus(`Uploading: ${Math.round(progress)}%`);
+          }, 
+          (error) => {
+            console.error("Storage upload failed:", error);
+            reject(error);
+          }, 
+          () => {
+            setUploadStatus('Finalizing...');
+            resolve();
+          }
+        );
+      });
+
+      const url = await getDownloadURL(uploadTask.snapshot.ref);
+      setUploadStatus('Updating database...');
 
       // Create a document for every designated user
       const uploadPromises = userIds.map(uid => 
@@ -239,8 +271,11 @@ export default function AdminPortal() {
           url,
           type: file.type,
           createdAt: new Date().toISOString()
+        }).catch(err => {
+          handleFirestoreError(err, OperationType.CREATE, 'documents');
         })
       );
+      
       await Promise.all(uploadPromises);
       
       if (userIds.length > 1) {
@@ -252,11 +287,19 @@ export default function AdminPortal() {
       setSelectedUserForDoc(null);
       setSelectedFile(null);
       setSelectedUserIds([]);
-    } catch (error) {
-      console.error("Upload failed", error);
-      alert('Upload failed. Please try again.');
+    } catch (error: any) {
+      console.error("Upload process failed:", error);
+      let message = 'Upload failed. Please try again.';
+      if (error.code === 'storage/unauthorized') {
+        message = 'Upload failed: Unauthorized. Please check storage rules.';
+      } else if (error.message?.includes('Firestore Error')) {
+        message = 'File uploaded to storage, but database update failed.';
+      }
+      alert(message);
     } finally {
       setIsUploading(false);
+      setUploadProgress(0);
+      setUploadStatus('');
     }
   };
 
@@ -715,10 +758,19 @@ export default function AdminPortal() {
                   className="flex-1 py-3 bg-blue-900 text-white rounded-xl font-bold hover:bg-blue-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {isUploading ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Uploading...
-                    </>
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${uploadProgress}%` }}
+                          className="bg-blue-900 h-full"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2 text-blue-900 text-sm font-bold">
+                        <div className="w-4 h-4 border-2 border-blue-900/30 border-t-blue-900 rounded-full animate-spin" />
+                        {uploadStatus}
+                      </div>
+                    </div>
                   ) : (
                     'Confirm Upload'
                   )}

@@ -103,6 +103,7 @@ export default function AdminPortal() {
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState('');
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
@@ -175,6 +176,7 @@ export default function AdminPortal() {
   const handleManualLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsAuthLoading(true);
     try {
       if (isSignUp) {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -194,7 +196,13 @@ export default function AdminPortal() {
       }
     } catch (err: any) {
       console.error("Admin login failed", err);
-      setError(err.message || t('portal.auth.authFailed'));
+      if (err.code === 'auth/too-many-requests') {
+        setError('Too many failed attempts. Please wait a few minutes before trying again.');
+      } else {
+        setError(err.message || t('portal.auth.authFailed'));
+      }
+    } finally {
+      setIsAuthLoading(false);
     }
   };
 
@@ -293,12 +301,20 @@ export default function AdminPortal() {
                 placeholder="••••••••"
               />
             </div>
-            {error && <p className="text-red-500 text-sm">{error}</p>}
+            {error && <p className="text-red-500 text-sm bg-red-50 p-3 rounded-lg border border-red-100">{error}</p>}
             <button 
               type="submit"
-              className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20"
+              disabled={isAuthLoading}
+              className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              {isSignUp ? "Sign Up" : t('portal.auth.signIn')}
+              {isAuthLoading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  {t('portal.loading')}
+                </>
+              ) : (
+                isSignUp ? "Sign Up" : t('portal.auth.signIn')
+              )}
             </button>
           </form>
 

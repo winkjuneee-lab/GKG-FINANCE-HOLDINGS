@@ -29,7 +29,8 @@ export interface AppDocument {
   applicationId: string;
   userId: string;
   name: string;
-  url: string;
+  url?: string;
+  fileData?: string;
   type: string;
   createdAt: string;
 }

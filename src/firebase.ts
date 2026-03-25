@@ -8,11 +8,10 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 
-// Explicitly initialize storage with the bucket URL to ensure connection
-const bucketUrl = firebaseConfig.storageBucket ? `gs://${firebaseConfig.storageBucket}` : undefined;
-export const storage = getStorage(app, bucketUrl);
+// Use standard storage initialization
+export const storage = getStorage(app);
 
-console.log("Firebase initialized with Storage Bucket:", bucketUrl);
+console.log("Firebase initialized with Storage");
 
 // Connection test
 async function testConnection() {

@@ -41,6 +41,7 @@
         "userId": { "type": "string" },
         "name": { "type": "string" },
         "url": { "type": "string", "format": "uri" },
+        "fileData": { "type": "string", "description": "Base64 encoded file data for small files" },
         "type": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },

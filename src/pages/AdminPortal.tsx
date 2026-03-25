@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { UserProfile, LoanApplication, AppDocument } from '../types';
 import { storage } from '../firebase';
-import { ref, uploadString, getDownloadURL } from 'firebase/storage';
+import { ref, uploadString, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import { addDoc as addFirestoreDoc } from 'firebase/firestore';
 
 enum OperationType {
@@ -236,19 +236,10 @@ export default function AdminPortal() {
 
     try {
       setIsUploading(true);
-      setUploadProgress(0);
-      setUploadStatus('Preparing upload...');
-      
-      const storagePath = `documents/${userIds.length > 1 ? 'broadcast' : userIds[0]}/${Date.now()}_${file.name}`;
-      const storageRef = ref(storage, storagePath);
-      
-      console.log("Storage path:", storagePath);
-      console.log("Storage bucket:", storage.app.options.storageBucket);
-      
-      setUploadStatus('Reading file...');
       setUploadProgress(10);
-
-      // Convert file to base64 for more resilient upload
+      setUploadStatus('Reading file...');
+      
+      // Convert file to base64
       const reader = new FileReader();
       const base64Promise = new Promise<string>((resolve, reject) => {
         reader.onload = () => {
@@ -260,49 +251,85 @@ export default function AdminPortal() {
       });
 
       const base64Data = await base64Promise;
-      setUploadProgress(30);
-      setUploadStatus('Uploading data...');
+      setUploadProgress(40);
+      console.log("File read successfully, size:", file.size);
 
-      // Use uploadString with a timeout
-      const uploadPromise = uploadString(storageRef, base64Data, 'base64', {
-        contentType: file.type
-      });
+      // If file is small enough (< 950KB), store it directly in Firestore
+      // This is a workaround for the Storage service hanging issue
+      if (file.size < 950 * 1024) {
+        setUploadStatus('Saving to database...');
+        setUploadProgress(60);
 
-      const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error("Upload timed out. The storage service is not responding. This can happen if the storage bucket is not fully provisioned or is blocked by your network.")), 40000)
-      );
-
-      const uploadResult = await Promise.race([uploadPromise, timeoutPromise]);
-      console.log("Storage upload successful:", uploadResult.metadata.fullPath);
-      
-      setUploadProgress(80);
-      setUploadStatus('Finalizing...');
-
-      const url = await getDownloadURL(uploadResult.ref);
-      console.log("Download URL obtained:", url);
-      setUploadStatus('Updating database...');
-      setUploadProgress(90);
-
-      // Create a document for every designated user
-      const uploadPromises = userIds.map(uid => 
-        addFirestoreDoc(collection(db, 'documents'), {
-          userId: uid,
-          name: file.name,
-          url,
-          type: file.type,
-          createdAt: new Date().toISOString()
-        }).catch(err => {
-          console.error(`Database update failed for user ${uid}:`, err);
-          handleFirestoreError(err, OperationType.CREATE, 'documents');
-        })
-      );
-      
-      await Promise.all(uploadPromises);
-      console.log("All database updates completed.");
-      
-      if (userIds.length > 1) {
-        alert(`File reflected on the accounts of ${userIds.length} designated users successfully!`);
+        const uploadPromises = userIds.map(uid => 
+          addFirestoreDoc(collection(db, 'documents'), {
+            userId: uid,
+            name: file.name,
+            fileData: base64Data, // Store base64 directly
+            type: file.type,
+            createdAt: new Date().toISOString()
+          }).catch(err => {
+            console.error(`Database update failed for user ${uid}:`, err);
+            handleFirestoreError(err, OperationType.CREATE, 'documents');
+          })
+        );
+        
+        await Promise.all(uploadPromises);
+        setUploadProgress(100);
+        alert(`File saved successfully to ${userIds.length} accounts!`);
       } else {
+        // For larger files, we still try Storage but with a warning and progress
+        setUploadStatus('Uploading to storage...');
+        const storagePath = `documents/${userIds.length > 1 ? 'broadcast' : userIds[0]}/${Date.now()}_${file.name}`;
+        const storageRef = ref(storage, storagePath);
+        
+        console.log("Attempting storage upload to:", storagePath);
+        
+        const uploadTask = uploadBytesResumable(storageRef, file, {
+          contentType: file.type
+        });
+
+        const uploadPromise = new Promise<string>((resolve, reject) => {
+          uploadTask.on('state_changed', 
+            (snapshot) => {
+              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 50 + 40;
+              setUploadProgress(Math.round(progress));
+              console.log(`Upload progress: ${Math.round(progress)}%`);
+            }, 
+            (error) => {
+              console.error("Storage upload error:", error);
+              reject(error);
+            }, 
+            async () => {
+              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+              resolve(downloadURL);
+            }
+          );
+        });
+
+        const timeoutPromise = new Promise<never>((_, reject) => 
+          setTimeout(() => {
+            uploadTask.cancel();
+            reject(new Error("File is too large for database storage, and the cloud storage service is not responding. Please try a smaller file (under 950KB)."));
+          }, 60000) // Increased timeout to 60s
+        );
+
+        const url = await Promise.race([uploadPromise, timeoutPromise]);
+        
+        setUploadStatus('Updating database...');
+        setUploadProgress(90);
+        const uploadPromises = userIds.map(uid => 
+          addFirestoreDoc(collection(db, 'documents'), {
+            userId: uid,
+            name: file.name,
+            url,
+            type: file.type,
+            createdAt: new Date().toISOString()
+          }).catch(err => {
+            handleFirestoreError(err, OperationType.CREATE, 'documents');
+          })
+        );
+        await Promise.all(uploadPromises);
+        setUploadProgress(100);
         alert('File uploaded successfully!');
       }
       
@@ -311,27 +338,7 @@ export default function AdminPortal() {
       setSelectedUserIds([]);
     } catch (error: any) {
       console.error("Upload process failed:", error);
-      let message = 'Upload failed. Please try again.';
-      
-      // Check if it's a Firestore error from our handler (JSON string)
-      try {
-        const parsedError = JSON.parse(error.message);
-        if (parsedError.operationType) {
-          message = `File uploaded to storage, but database update failed: ${parsedError.error}`;
-        }
-      } catch (e) {
-        // Not a JSON error, handle standard Firebase errors
-        if (error.code === 'storage/unauthorized') {
-          message = 'Upload failed: Unauthorized access to storage. Please check storage rules.';
-        } else if (error.code === 'storage/canceled') {
-          message = error.message || 'Upload timed out or was canceled.';
-        } else if (error.code === 'storage/retry-limit-exceeded') {
-          message = 'Upload failed: Maximum retry limit exceeded. Please check your connection.';
-        } else {
-          message = error.message || message;
-        }
-      }
-      alert(message);
+      alert(error.message || 'Upload failed. Please try again.');
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
@@ -754,14 +761,14 @@ export default function AdminPortal() {
                 onDrop={(e) => {
                   e.preventDefault();
                   const file = e.dataTransfer.files[0];
-                  if (file && file.type === 'application/pdf') setSelectedFile(file);
+                  if (file && (file.type === 'application/pdf' || file.type.startsWith('image/'))) setSelectedFile(file);
                 }}
               >
                 <input 
                   type="file" 
                   id="file-upload" 
                   className="hidden" 
-                  accept=".pdf"
+                  accept=".pdf,.jpg,.jpeg,.png"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) setSelectedFile(file);
@@ -772,7 +779,7 @@ export default function AdminPortal() {
                   <p className="text-sm font-medium text-slate-600">
                     {selectedFile ? selectedFile.name : 'Click to upload or drag and drop'}
                   </p>
-                  <p className="text-xs text-slate-400 mt-1">PDF files only (max 10MB)</p>
+                  <p className="text-xs text-slate-400 mt-1">PDF or Image files (max 10MB)</p>
                 </label>
               </div>
 

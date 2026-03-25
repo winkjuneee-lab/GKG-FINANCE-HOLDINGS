@@ -34,11 +34,13 @@ import {
   AlertCircle,
   Shield,
   User as UserIcon,
-  Download
+  Download,
+  Upload
 } from 'lucide-react';
 import { LoanApplication, UserProfile, AppDocument } from '../types';
 import Navbar from '../components/Navbar';
 import { Link } from 'react-router-dom';
+import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 
 enum OperationType {
   CREATE = 'create',
@@ -106,6 +108,10 @@ export default function Portal() {
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState('');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
@@ -219,6 +225,98 @@ export default function Portal() {
   };
 
   const handleLogout = () => signOut(auth);
+
+  const handleFileUpload = async (file: File) => {
+    if (!user || !file) return;
+    setIsUploading(true);
+    setUploadProgress(0);
+    setUploadStatus('Preparing...');
+
+    try {
+      const storage = getStorage();
+      const fileId = Math.random().toString(36).substring(7);
+      const fileName = `${fileId}_${file.name}`;
+      
+      // If file is small (< 950KB), store in Firestore directly
+      if (file.size < 950 * 1024) {
+        setUploadStatus('Reading file...');
+        const reader = new FileReader();
+        const fileDataPromise = new Promise<string>((resolve) => {
+          reader.onload = (e) => {
+            const base64 = e.target?.result as string;
+            resolve(base64.split(',')[1]);
+          };
+        });
+        reader.readAsDataURL(file);
+        const fileData = await fileDataPromise;
+
+        setUploadStatus('Saving to database...');
+        setUploadProgress(50);
+        
+        await addDoc(collection(db, 'documents'), {
+          userId: user.uid,
+          applicationId: 'general',
+          name: file.name,
+          type: file.type,
+          fileData,
+          createdAt: new Date().toISOString()
+        }).catch(err => {
+          handleFirestoreError(err, OperationType.CREATE, 'documents');
+        });
+        
+        setUploadProgress(100);
+      } else {
+        // Larger files go to Storage
+        setUploadStatus('Uploading to storage...');
+        const storageRef = ref(storage, `documents/${user.uid}/${fileName}`);
+        const uploadTask = uploadBytesResumable(storageRef, file);
+
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            uploadTask.cancel();
+            reject(new Error('Upload timed out. Please try again.'));
+          }, 60000);
+
+          uploadTask.on('state_changed', 
+            (snapshot) => {
+              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+              setUploadProgress(progress);
+            },
+            (error) => {
+              clearTimeout(timeout);
+              reject(error);
+            },
+            async () => {
+              clearTimeout(timeout);
+              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+              
+              setUploadStatus('Finalizing...');
+              await addDoc(collection(db, 'documents'), {
+                userId: user.uid,
+                applicationId: 'general',
+                name: file.name,
+                type: file.type,
+                url: downloadURL,
+                createdAt: new Date().toISOString()
+              }).catch(err => {
+                handleFirestoreError(err, OperationType.CREATE, 'documents');
+              });
+              resolve();
+            }
+          );
+        });
+      }
+
+      setSelectedFile(null);
+      setUploadStatus('Success!');
+      setTimeout(() => setUploadStatus(''), 3000);
+    } catch (error: any) {
+      console.error("Upload failed", error);
+      setError(error.message || 'Upload failed. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const createApplication = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -607,10 +705,83 @@ export default function Portal() {
 
         {activeTab === 'documents' && (
           <div className="max-w-4xl">
-            <header className="mb-10">
-              <h1 className="text-2xl font-bold text-slate-900">Documents</h1>
-              <p className="text-slate-500">Download your loan agreements and other important files.</p>
+            <header className="mb-10 flex justify-between items-start">
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900">Documents</h1>
+                <p className="text-slate-500">Download your loan agreements and other important files.</p>
+              </div>
             </header>
+
+            {/* Upload Section */}
+            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm mb-10">
+              <h2 className="text-lg font-bold text-slate-900 mb-4">Upload Document</h2>
+              <div className="grid lg:grid-cols-2 gap-8 items-center">
+                <div 
+                  className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer ${
+                    selectedFile ? 'border-blue-900 bg-blue-50' : 'border-slate-200 hover:border-blue-900'
+                  }`}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const file = e.dataTransfer.files[0];
+                    if (file && (file.type === 'application/pdf' || file.type.startsWith('image/'))) setSelectedFile(file);
+                  }}
+                  onClick={() => document.getElementById('client-file-upload')?.click()}
+                >
+                  <input 
+                    type="file" 
+                    id="client-file-upload" 
+                    className="hidden" 
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) setSelectedFile(file);
+                    }}
+                  />
+                  <Upload className={`mx-auto mb-3 ${selectedFile ? 'text-blue-900' : 'text-slate-300'}`} size={32} />
+                  <p className="text-sm font-medium text-slate-600">
+                    {selectedFile ? selectedFile.name : 'Click to upload or drag and drop'}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">PDF, JPG, PNG (max 10MB)</p>
+                </div>
+
+                <div className="space-y-4">
+                  <p className="text-sm text-slate-500">
+                    Please upload any required documents such as ID, proof of income, or bank statements to support your application.
+                  </p>
+                  <button 
+                    onClick={() => handleFileUpload(selectedFile!)}
+                    disabled={!selectedFile || isUploading}
+                    className="w-full py-4 bg-blue-900 text-white rounded-xl font-bold hover:bg-blue-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-h-[56px]"
+                  >
+                    {isUploading ? (
+                      <div className="w-full px-4">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-xs font-bold uppercase tracking-wider">{uploadStatus}</span>
+                          <span className="text-xs font-bold">{Math.round(uploadProgress)}%</span>
+                        </div>
+                        <div className="w-full bg-blue-800/50 rounded-full h-1.5 overflow-hidden">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${uploadProgress}%` }}
+                            className="bg-white h-full"
+                            transition={{ duration: 0.3 }}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      'Upload Document'
+                    )}
+                  </button>
+                  {uploadStatus === 'Success!' && (
+                    <p className="text-green-600 text-sm font-bold text-center animate-bounce">
+                      Document uploaded successfully!
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="grid md:grid-cols-2 gap-6">
               {documents.map((doc) => (
                 <div key={doc.id} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between group">
@@ -624,7 +795,8 @@ export default function Portal() {
                     </div>
                   </div>
                   <a 
-                    href={doc.url} 
+                    href={doc.fileData ? `data:${doc.type};base64,${doc.fileData}` : doc.url} 
+                    download={doc.name}
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-blue-900 hover:text-white transition-all"

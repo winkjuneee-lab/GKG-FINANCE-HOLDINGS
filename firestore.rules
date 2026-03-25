@@ -50,8 +50,10 @@ service cloud.firestore {
     }
 
     function isValidDocument(data) {
-      return hasOnlyAllowedFields(['userId', 'name', 'url', 'type', 'createdAt', 'applicationId']) &&
-             data.userId is string && data.name is string && data.url is string &&
+      return hasOnlyAllowedFields(['userId', 'name', 'url', 'type', 'createdAt', 'applicationId', 'fileData']) &&
+             data.userId is string && data.name is string &&
+             (!('url' in data) || data.url is string) &&
+             (!('fileData' in data) || (data.fileData is string && data.fileData.size() < 1048576)) &&
              data.type is string && data.createdAt is string &&
              (!('applicationId' in data) || data.applicationId is string);
     }

@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { UserProfile, LoanApplication, AppDocument } from '../types';
 import { storage } from '../firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 import { addDoc as addFirestoreDoc } from 'firebase/firestore';
 
 enum OperationType {
@@ -245,11 +245,34 @@ export default function AdminPortal() {
       console.log("Storage path:", storagePath);
       console.log("Storage bucket:", storage.app.options.storageBucket);
       
-      setUploadStatus('Uploading file...');
-      setUploadProgress(20);
+      setUploadStatus('Reading file...');
+      setUploadProgress(10);
 
-      // Use uploadBytes for a simpler, more direct upload
-      const uploadResult = await uploadBytes(storageRef, file);
+      // Convert file to base64 for more resilient upload
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(',')[1]);
+        };
+        reader.onerror = () => reject(new Error("Failed to read file."));
+        reader.readAsDataURL(file);
+      });
+
+      const base64Data = await base64Promise;
+      setUploadProgress(30);
+      setUploadStatus('Uploading data...');
+
+      // Use uploadString with a timeout
+      const uploadPromise = uploadString(storageRef, base64Data, 'base64', {
+        contentType: file.type
+      });
+
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error("Upload timed out. The storage service is not responding. This can happen if the storage bucket is not fully provisioned or is blocked by your network.")), 40000)
+      );
+
+      const uploadResult = await Promise.race([uploadPromise, timeoutPromise]);
       console.log("Storage upload successful:", uploadResult.metadata.fullPath);
       
       setUploadProgress(80);

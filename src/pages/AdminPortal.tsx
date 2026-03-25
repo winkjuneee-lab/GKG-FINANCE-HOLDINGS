@@ -24,9 +24,16 @@ import {
   XCircle,
   Clock,
   ChevronRight,
-  LogOut
+  LogOut,
+  Upload,
+  Edit,
+  Trash2,
+  Download
 } from 'lucide-react';
-import { UserProfile, LoanApplication } from '../types';
+import { UserProfile, LoanApplication, AppDocument } from '../types';
+import { storage } from '../firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { addDoc as addFirestoreDoc } from 'firebase/firestore';
 
 enum OperationType {
   CREATE = 'create',
@@ -89,6 +96,9 @@ export default function AdminPortal() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [activeTab, setActiveTab] = useState<'applications' | 'users'>('applications');
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [uploadingForUser, setUploadingForUser] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
@@ -197,6 +207,48 @@ export default function AdminPortal() {
       });
     } catch (error) {
       console.error("Failed to update status", error);
+    }
+  };
+
+  const handleFileUpload = async (userId: string, file: File) => {
+    try {
+      setUploadingForUser(userId);
+      const storageRef = ref(storage, `documents/${userId}/${Date.now()}_${file.name}`);
+      const snapshot = await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(snapshot.ref);
+
+      await addFirestoreDoc(collection(db, 'documents'), {
+        userId,
+        name: file.name,
+        url,
+        type: file.type,
+        createdAt: new Date().toISOString()
+      });
+      
+      alert('File uploaded successfully!');
+    } catch (error) {
+      console.error("Upload failed", error);
+      alert('Upload failed. Please try again.');
+    } finally {
+      setUploadingForUser(null);
+    }
+  };
+
+  const updateUserProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+
+    try {
+      const userRef = doc(db, 'users', editingUser.uid);
+      await updateDoc(userRef, {
+        displayName: editingUser.displayName,
+        role: editingUser.role
+      });
+      setEditingUser(null);
+      alert('User updated successfully!');
+    } catch (error) {
+      console.error("Update failed", error);
+      alert('Update failed.');
     }
   };
 
@@ -325,115 +377,252 @@ export default function AdminPortal() {
 
         {/* Filters & Search */}
         <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm mb-8 flex flex-col md:flex-row gap-4 items-center">
+          <div className="flex gap-2 w-full md:w-auto border-r border-slate-100 pr-4">
+            <button
+              onClick={() => setActiveTab('applications')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-all ${
+                activeTab === 'applications' ? 'bg-blue-900 text-white' : 'text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              <FileText size={18} /> Applications
+            </button>
+            <button
+              onClick={() => setActiveTab('users')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-all ${
+                activeTab === 'users' ? 'bg-blue-900 text-white' : 'text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              <Users size={18} /> Users
+            </button>
+          </div>
           <div className="relative flex-1 w-full">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
             <input 
               type="text" 
-              placeholder={t('admin.searchPlaceholder')}
+              placeholder={activeTab === 'applications' ? t('admin.searchPlaceholder') : "Search users by name or email..."}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-blue-900 transition-all"
             />
           </div>
-          <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
-            {(['all', 'pending', 'approved', 'rejected'] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-6 py-2 rounded-xl font-bold text-sm capitalize transition-all whitespace-nowrap ${
-                  filter === f ? 'bg-blue-900 text-white shadow-lg shadow-blue-900/20' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
-                }`}
-              >
-                {t(`admin.filters.${f}`)}
-              </button>
-            ))}
-          </div>
+          {activeTab === 'applications' && (
+            <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+              {(['all', 'pending', 'approved', 'rejected'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={`px-6 py-2 rounded-xl font-bold text-sm capitalize transition-all whitespace-nowrap ${
+                    filter === f ? 'bg-blue-900 text-white shadow-lg shadow-blue-900/20' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+                  }`}
+                >
+                  {t(`admin.filters.${f}`)}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Applications Table */}
-        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider">
-                  <th className="px-6 py-5">{t('admin.table.application')}</th>
-                  <th className="px-6 py-5">{t('admin.table.userDetails')}</th>
-                  <th className="px-6 py-5">{t('admin.table.amountClass')}</th>
-                  <th className="px-6 py-5">{t('admin.table.status')}</th>
-                  <th className="px-6 py-5 text-right">{t('admin.table.actions')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredApps.map((app) => {
-                  const appUser = users.find(u => u.uid === app.userId);
-                  return (
-                    <motion.tr 
-                      layout
-                      key={app.id} 
-                      className="hover:bg-slate-50/50 transition-colors group"
-                    >
+        {activeTab === 'applications' ? (
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider">
+                    <th className="px-6 py-5">{t('admin.table.application')}</th>
+                    <th className="px-6 py-5">{t('admin.table.userDetails')}</th>
+                    <th className="px-6 py-5">{t('admin.table.amountClass')}</th>
+                    <th className="px-6 py-5">{t('admin.table.status')}</th>
+                    <th className="px-6 py-5 text-right">{t('admin.table.actions')}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredApps.map((app) => {
+                    const appUser = users.find(u => u.uid === app.userId);
+                    return (
+                      <motion.tr 
+                        layout
+                        key={app.id} 
+                        className="hover:bg-slate-50/50 transition-colors group"
+                      >
+                        <td className="px-6 py-6">
+                          <div className="flex flex-col">
+                            <span className="font-mono text-xs text-slate-400 mb-1">#{app.id.slice(0, 12)}</span>
+                            <span className="text-xs text-slate-500">{new Date(app.createdAt).toLocaleDateString()}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-6">
+                          <div className="flex flex-col">
+                            <span className="font-bold text-slate-900">{appUser?.displayName || t('admin.table.unknownUser')}</span>
+                            <span className="text-xs text-slate-500">{appUser?.email || app.userId}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-6">
+                          <div className="flex flex-col">
+                            <span className="font-bold text-slate-900">${app.amount.toLocaleString()}</span>
+                            <span className="text-[10px] font-bold uppercase text-blue-600 tracking-wider">{app.loanClass}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-6">
+                          <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold capitalize ${
+                            app.status === 'pending' ? 'bg-amber-50 text-amber-600' : 
+                            app.status === 'approved' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
+                          }`}>
+                            {app.status === 'pending' && <Clock size={12} />}
+                            {app.status === 'approved' && <CheckCircle size={12} />}
+                            {app.status === 'rejected' && <XCircle size={12} />}
+                            {t(`portal.dashboard.status.${app.status}`)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-6 text-right">
+                          <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {app.status === 'pending' && (
+                              <>
+                                <button 
+                                  onClick={() => updateAppStatus(app.id, 'approved')}
+                                  className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-600 hover:text-white transition-all"
+                                  title="Approve"
+                                >
+                                  <CheckCircle size={18} />
+                                </button>
+                                <button 
+                                  onClick={() => updateAppStatus(app.id, 'rejected')}
+                                  className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all"
+                                  title="Reject"
+                                >
+                                  <XCircle size={18} />
+                                </button>
+                              </>
+                            )}
+                            <button className="p-2 bg-slate-50 text-slate-400 rounded-lg hover:bg-slate-900 hover:text-white transition-all">
+                              <ChevronRight size={18} />
+                            </button>
+                          </div>
+                        </td>
+                      </motion.tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider">
+                    <th className="px-6 py-5">User</th>
+                    <th className="px-6 py-5">Role</th>
+                    <th className="px-6 py-5">Joined</th>
+                    <th className="px-6 py-5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {users.filter(u => 
+                    u.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                    u.email.toLowerCase().includes(searchTerm.toLowerCase())
+                  ).map((u) => (
+                    <tr key={u.uid} className="hover:bg-slate-50/50 transition-colors group">
                       <td className="px-6 py-6">
                         <div className="flex flex-col">
-                          <span className="font-mono text-xs text-slate-400 mb-1">#{app.id.slice(0, 12)}</span>
-                          <span className="text-xs text-slate-500">{new Date(app.createdAt).toLocaleDateString()}</span>
+                          <span className="font-bold text-slate-900">{u.displayName || 'Unnamed User'}</span>
+                          <span className="text-xs text-slate-500">{u.email}</span>
                         </div>
                       </td>
                       <td className="px-6 py-6">
-                        <div className="flex flex-col">
-                          <span className="font-bold text-slate-900">{appUser?.displayName || t('admin.table.unknownUser')}</span>
-                          <span className="text-xs text-slate-500">{appUser?.email || app.userId}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-6">
-                        <div className="flex flex-col">
-                          <span className="font-bold text-slate-900">${app.amount.toLocaleString()}</span>
-                          <span className="text-[10px] font-bold uppercase text-blue-600 tracking-wider">{app.loanClass}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-6">
-                        <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold capitalize ${
-                          app.status === 'pending' ? 'bg-amber-50 text-amber-600' : 
-                          app.status === 'approved' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                          u.role === 'admin' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'
                         }`}>
-                          {app.status === 'pending' && <Clock size={12} />}
-                          {app.status === 'approved' && <CheckCircle size={12} />}
-                          {app.status === 'rejected' && <XCircle size={12} />}
-                          {t(`portal.dashboard.status.${app.status}`)}
-                        </div>
+                          {u.role}
+                        </span>
+                      </td>
+                      <td className="px-6 py-6">
+                        <span className="text-xs text-slate-500">{new Date(u.createdAt).toLocaleDateString()}</span>
                       </td>
                       <td className="px-6 py-6 text-right">
-                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {app.status === 'pending' && (
-                            <>
-                              <button 
-                                onClick={() => updateAppStatus(app.id, 'approved')}
-                                className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-600 hover:text-white transition-all"
-                                title="Approve"
-                              >
-                                <CheckCircle size={18} />
-                              </button>
-                              <button 
-                                onClick={() => updateAppStatus(app.id, 'rejected')}
-                                className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-all"
-                                title="Reject"
-                              >
-                                <XCircle size={18} />
-                              </button>
-                            </>
-                          )}
-                          <button className="p-2 bg-slate-50 text-slate-400 rounded-lg hover:bg-slate-900 hover:text-white transition-all">
-                            <ChevronRight size={18} />
+                        <div className="flex justify-end gap-2">
+                          <label className={`p-2 rounded-lg cursor-pointer transition-all ${
+                            uploadingForUser === u.uid ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white'
+                          }`}>
+                            <Upload size={18} />
+                            <input 
+                              type="file" 
+                              className="hidden" 
+                              accept=".pdf"
+                              disabled={uploadingForUser !== null}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleFileUpload(u.uid, file);
+                              }}
+                            />
+                          </label>
+                          <button 
+                            onClick={() => setEditingUser(u)}
+                            className="p-2 bg-slate-50 text-slate-400 rounded-lg hover:bg-slate-900 hover:text-white transition-all"
+                          >
+                            <Edit size={18} />
                           </button>
                         </div>
                       </td>
-                    </motion.tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        )}
       </div>
+
+      {/* Edit User Modal */}
+      {editingUser && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8"
+          >
+            <h2 className="text-2xl font-bold text-slate-900 mb-6">Edit User Profile</h2>
+            <form onSubmit={updateUserProfile} className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Display Name</label>
+                <input 
+                  type="text" 
+                  value={editingUser.displayName || ''} 
+                  onChange={(e) => setEditingUser({...editingUser, displayName: e.target.value})}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-900" 
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Role</label>
+                <select 
+                  value={editingUser.role} 
+                  onChange={(e) => setEditingUser({...editingUser, role: e.target.value as any})}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-900"
+                >
+                  <option value="client">Client</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div className="flex gap-4">
+                <button 
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  className="flex-1 py-3 bg-blue-900 text-white rounded-xl font-bold hover:bg-blue-800 transition-all"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

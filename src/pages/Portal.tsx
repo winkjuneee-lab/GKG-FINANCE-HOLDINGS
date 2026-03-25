@@ -33,9 +33,10 @@ import {
   CheckCircle,
   AlertCircle,
   Shield,
-  User as UserIcon
+  User as UserIcon,
+  Download
 } from 'lucide-react';
-import { LoanApplication, UserProfile } from '../types';
+import { LoanApplication, UserProfile, AppDocument } from '../types';
 import Navbar from '../components/Navbar';
 import { Link } from 'react-router-dom';
 
@@ -95,9 +96,10 @@ export default function Portal() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [applications, setApplications] = useState<LoanApplication[]>([]);
+  const [documents, setDocuments] = useState<AppDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [showApplyModal, setShowApplyModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'applications' | 'messages' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'applications' | 'messages' | 'settings' | 'documents'>('dashboard');
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -141,8 +143,8 @@ export default function Portal() {
   useEffect(() => {
     if (!user) return;
 
-    const q = query(collection(db, 'applications'), where('userId', '==', user.uid));
-    const unsubApps = onSnapshot(q, (snapshot) => {
+    const appsQuery = query(collection(db, 'applications'), where('userId', '==', user.uid));
+    const unsubApps = onSnapshot(appsQuery, (snapshot) => {
       const apps = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LoanApplication));
       setApplications(apps);
       setLoading(false);
@@ -150,7 +152,18 @@ export default function Portal() {
       handleFirestoreError(error, OperationType.GET, 'applications');
     });
 
-    return () => unsubApps();
+    const docsQuery = query(collection(db, 'documents'), where('userId', '==', user.uid));
+    const unsubDocs = onSnapshot(docsQuery, (snapshot) => {
+      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppDocument));
+      setDocuments(docs);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'documents');
+    });
+
+    return () => {
+      unsubApps();
+      unsubDocs();
+    };
   }, [user]);
 
   useEffect(() => {
@@ -345,6 +358,14 @@ export default function Portal() {
             <MessageSquare size={20} /> {t('portal.sidebar.messages')}
           </button>
           <button 
+            onClick={() => setActiveTab('documents')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
+              activeTab === 'documents' ? 'bg-blue-50 text-blue-900' : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <FileText size={20} /> Documents
+          </button>
+          <button 
             onClick={() => setActiveTab('settings')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
               activeTab === 'settings' ? 'bg-blue-50 text-blue-900' : 'text-slate-600 hover:bg-slate-50'
@@ -385,6 +406,13 @@ export default function Portal() {
         >
           <MessageSquare size={20} />
           <span className="text-[10px] font-bold uppercase">{t('portal.sidebar.messages')}</span>
+        </button>
+        <button 
+          onClick={() => setActiveTab('documents')}
+          className={`flex flex-col items-center gap-1 p-2 ${activeTab === 'documents' ? 'text-blue-900' : 'text-slate-400'}`}
+        >
+          <FileText size={20} />
+          <span className="text-[10px] font-bold uppercase">Docs</span>
         </button>
         <button 
           onClick={() => setActiveTab('settings')}
@@ -555,6 +583,44 @@ export default function Portal() {
             <p className="text-slate-500 max-w-md">
               You don't have any messages yet. Our team will contact you here regarding your applications.
             </p>
+          </div>
+        )}
+
+        {activeTab === 'documents' && (
+          <div className="max-w-4xl">
+            <header className="mb-10">
+              <h1 className="text-2xl font-bold text-slate-900">Documents</h1>
+              <p className="text-slate-500">Download your loan agreements and other important files.</p>
+            </header>
+            <div className="grid md:grid-cols-2 gap-6">
+              {documents.map((doc) => (
+                <div key={doc.id} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between group">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-blue-50 text-blue-900 rounded-xl">
+                      <FileText size={24} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900 group-hover:text-blue-900 transition-colors">{doc.name}</h3>
+                      <p className="text-xs text-slate-500">{new Date(doc.createdAt).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                  <a 
+                    href={doc.url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-blue-900 hover:text-white transition-all"
+                  >
+                    <Download size={20} />
+                  </a>
+                </div>
+              ))}
+              {documents.length === 0 && (
+                <div className="col-span-2 py-20 text-center bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+                  <FileText className="mx-auto text-slate-300 mb-4" size={48} />
+                  <p className="text-slate-500 font-medium">No documents available yet.</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

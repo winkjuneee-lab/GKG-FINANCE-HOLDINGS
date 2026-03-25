@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { UserProfile, LoanApplication, AppDocument } from '../types';
 import { storage } from '../firebase';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { addDoc as addFirestoreDoc } from 'firebase/firestore';
 
 enum OperationType {
@@ -243,38 +243,22 @@ export default function AdminPortal() {
       const storageRef = ref(storage, storagePath);
       
       console.log("Storage path:", storagePath);
-      const uploadTask = uploadBytesResumable(storageRef, file);
+      console.log("Storage bucket:", storage.app.options.storageBucket);
+      
+      setUploadStatus('Uploading file...');
+      setUploadProgress(20);
 
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          uploadTask.cancel();
-          reject(new Error('Upload timed out after 45 seconds. Please check your connection.'));
-        }, 45000);
+      // Use uploadBytes for a simpler, more direct upload
+      const uploadResult = await uploadBytes(storageRef, file);
+      console.log("Storage upload successful:", uploadResult.metadata.fullPath);
+      
+      setUploadProgress(80);
+      setUploadStatus('Finalizing...');
 
-        uploadTask.on('state_changed', 
-          (snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            console.log(`Upload progress: ${Math.round(progress)}%`);
-            setUploadProgress(progress);
-            setUploadStatus(`Uploading: ${Math.round(progress)}%`);
-          }, 
-          (error) => {
-            clearTimeout(timeout);
-            console.error("Storage upload task error:", error);
-            reject(error);
-          }, 
-          () => {
-            clearTimeout(timeout);
-            console.log("Storage upload task completed successfully.");
-            setUploadStatus('Finalizing...');
-            resolve();
-          }
-        );
-      });
-
-      const url = await getDownloadURL(uploadTask.snapshot.ref);
+      const url = await getDownloadURL(uploadResult.ref);
       console.log("Download URL obtained:", url);
       setUploadStatus('Updating database...');
+      setUploadProgress(90);
 
       // Create a document for every designated user
       const uploadPromises = userIds.map(uid => 

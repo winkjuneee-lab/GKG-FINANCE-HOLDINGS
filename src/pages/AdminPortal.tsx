@@ -232,28 +232,40 @@ export default function AdminPortal() {
       return;
     }
 
+    console.log("Starting upload process for users:", userIds, "File:", file.name, "Size:", file.size);
+
     try {
       setIsUploading(true);
       setUploadProgress(0);
-      setUploadStatus('Starting upload...');
+      setUploadStatus('Preparing upload...');
       
       const storagePath = `documents/${userIds.length > 1 ? 'broadcast' : userIds[0]}/${Date.now()}_${file.name}`;
       const storageRef = ref(storage, storagePath);
       
+      console.log("Storage path:", storagePath);
       const uploadTask = uploadBytesResumable(storageRef, file);
 
       await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          uploadTask.cancel();
+          reject(new Error('Upload timed out after 45 seconds. Please check your connection.'));
+        }, 45000);
+
         uploadTask.on('state_changed', 
           (snapshot) => {
             const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            console.log(`Upload progress: ${Math.round(progress)}%`);
             setUploadProgress(progress);
             setUploadStatus(`Uploading: ${Math.round(progress)}%`);
           }, 
           (error) => {
-            console.error("Storage upload failed:", error);
+            clearTimeout(timeout);
+            console.error("Storage upload task error:", error);
             reject(error);
           }, 
           () => {
+            clearTimeout(timeout);
+            console.log("Storage upload task completed successfully.");
             setUploadStatus('Finalizing...');
             resolve();
           }
@@ -261,6 +273,7 @@ export default function AdminPortal() {
       });
 
       const url = await getDownloadURL(uploadTask.snapshot.ref);
+      console.log("Download URL obtained:", url);
       setUploadStatus('Updating database...');
 
       // Create a document for every designated user
@@ -272,11 +285,13 @@ export default function AdminPortal() {
           type: file.type,
           createdAt: new Date().toISOString()
         }).catch(err => {
+          console.error(`Database update failed for user ${uid}:`, err);
           handleFirestoreError(err, OperationType.CREATE, 'documents');
         })
       );
       
       await Promise.all(uploadPromises);
+      console.log("All database updates completed.");
       
       if (userIds.length > 1) {
         alert(`File reflected on the accounts of ${userIds.length} designated users successfully!`);
@@ -290,10 +305,24 @@ export default function AdminPortal() {
     } catch (error: any) {
       console.error("Upload process failed:", error);
       let message = 'Upload failed. Please try again.';
-      if (error.code === 'storage/unauthorized') {
-        message = 'Upload failed: Unauthorized. Please check storage rules.';
-      } else if (error.message?.includes('Firestore Error')) {
-        message = 'File uploaded to storage, but database update failed.';
+      
+      // Check if it's a Firestore error from our handler (JSON string)
+      try {
+        const parsedError = JSON.parse(error.message);
+        if (parsedError.operationType) {
+          message = `File uploaded to storage, but database update failed: ${parsedError.error}`;
+        }
+      } catch (e) {
+        // Not a JSON error, handle standard Firebase errors
+        if (error.code === 'storage/unauthorized') {
+          message = 'Upload failed: Unauthorized access to storage. Please check storage rules.';
+        } else if (error.code === 'storage/canceled') {
+          message = error.message || 'Upload timed out or was canceled.';
+        } else if (error.code === 'storage/retry-limit-exceeded') {
+          message = 'Upload failed: Maximum retry limit exceeded. Please check your connection.';
+        } else {
+          message = error.message || message;
+        }
       }
       alert(message);
     } finally {
@@ -755,20 +784,21 @@ export default function AdminPortal() {
                     handleFileUpload(ids, selectedFile!);
                   }}
                   disabled={!selectedFile || isUploading || (selectedUserForDoc === 'multi' && selectedUserIds.length === 0)}
-                  className="flex-1 py-3 bg-blue-900 text-white rounded-xl font-bold hover:bg-blue-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="flex-[2] py-3 bg-blue-900 text-white rounded-xl font-bold hover:bg-blue-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-h-[52px]"
                 >
                   {isUploading ? (
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                    <div className="w-full px-4">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs font-bold uppercase tracking-wider">{uploadStatus}</span>
+                        <span className="text-xs font-bold">{Math.round(uploadProgress)}%</span>
+                      </div>
+                      <div className="w-full bg-blue-800/50 rounded-full h-1.5 overflow-hidden">
                         <motion.div 
                           initial={{ width: 0 }}
                           animate={{ width: `${uploadProgress}%` }}
-                          className="bg-blue-900 h-full"
+                          className="bg-white h-full"
+                          transition={{ duration: 0.3 }}
                         />
-                      </div>
-                      <div className="flex items-center gap-2 text-blue-900 text-sm font-bold">
-                        <div className="w-4 h-4 border-2 border-blue-900/30 border-t-blue-900 rounded-full animate-spin" />
-                        {uploadStatus}
                       </div>
                     </div>
                   ) : (
